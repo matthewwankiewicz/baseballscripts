@@ -1,3 +1,9 @@
+hits <- c("double", "single", "triple", "home_run")
+pa_ab <- c("catcher_interf", "caught_stealing_2b", "caught_stealing_3b",
+           "caught_stealing_home", "hit_by_pitch", "pickoff_1b", "pickoff_3b", 
+           "pickoff_caught_stealing_2b", "stolen_base_2b", "sac_bunt", "sac_fly",
+           "sac_fly_double_play", "wild_pitch", "walk")
+
 get_rankings_hitter <- function(player_name, Date = "2023-03-30"){
   filtered <- filter_statcast_hitter(date = Date)
   
