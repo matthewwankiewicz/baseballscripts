@@ -124,12 +124,12 @@ usable_data %>% code_barrel() %>%
            pitch_name %in% c("Sweeper", "Curveball", "Slider", "Knucke Curve", "Slurve", "Eephus", "Slow Curve", "Knuckleball") ~ "breaking",
            pitch_name %in% c("4-Seam Fastball", "Sinker", "Cutter") ~ "fastball",
            pitch_name %in% c("Split-Finger", "Forkball", "Screwball", "Changeup") ~ "offspeed"
-         )) %>% 
+         ),
+         season = substr(game_date, 1, 4)) %>% 
   drop_na(actual_strike) -> data_pitches_new
 
 ## check that data is up to date
 print(max(data_pitches_new$game_date) == Sys.Date()-1) 
-
 
 ## combine older and new data
 data_pitches <- rbind(data_pitches, data_pitches_new)

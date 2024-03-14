@@ -95,3 +95,7 @@ get_rankings_hitter <- function(player_name, Date = "2023-03-30"){
     cbind(data1, data2) %>% tibble() %>% return()
   }
 }
+
+
+get_rankings_hitter("Bobby Witt", Sys.Date() - 245)
+unun
