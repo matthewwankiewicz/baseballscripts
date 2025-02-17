@@ -105,3 +105,5 @@ get_rankings_pitcher <- function(player, date = "2023-03-30"){
     
   }
 }
+
+get_rankings_pitcher("Gerrit Cole", date = Sys.Date() - 30)
