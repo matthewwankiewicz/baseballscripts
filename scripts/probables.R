@@ -1,4 +1,6 @@
 ### PROBABLES
+library(baseballr)
+library(tidyverse)
 
 game_pks <- mlb_game_pks(Sys.Date()) %>% pull(game_pk)
 
@@ -19,5 +21,4 @@ tibble(starters) %>%
          !is.na(stuff_plus)) %>%
   left_join(whiff_plus.dat %>% 
               mutate(pitcher_name = stringi::stri_trans_general(str = pitcher_name, 
-                                                                id = "Latin-ASCII")), by = c("starters" = "pitcher_name", "pitch_name")) %>% 
-  write_rds("predictors/probables.rds")
+                                                                id = "Latin-ASCII")), by = c("starters" = "pitcher_name", "pitch_name"))
