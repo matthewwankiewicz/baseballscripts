@@ -1,19 +1,22 @@
 library(tidyverse)
 library(zoo)
 library(ggplot2)
+library(baseballr)
+source("functions/ip_to_outs.R")
 
 ## load id table
 chadwick_player_lu_table <- chadwick_player_lu()
 
 key_ids <- chadwick_player_lu_table %>% 
   mutate(name = paste(name_first, name_last)) %>% 
-  select(name, key_fangraphs)
+  select(name, key_fangraphs) %>% 
+  data.table::data.table()
 
 ## plot moving averages of stats
 ### PITCHERS
 data <- pitcher_game_logs_fg(key_ids %>% 
-                       filter(name == "Braxton Garrett") %>% drop_na(key_fangraphs) %>% 
-                       pull(key_fangraphs), year = 2023) %>% 
+                       filter(grepl("Cody Bradford", name)) %>% drop_na(key_fangraphs) %>% 
+                       pull(key_fangraphs), year = 2024) %>% 
   mutate(OUTS = ip_to_outs(IP),
          QS = ifelse(IP >= 6 & ER <= 3, 1, 0),
          PTS = 4*W - 4*L + 8*CG + 8*ShO + 0.5*OUTS - 1.5*H - 3*ER -
@@ -25,8 +28,8 @@ data <- pitcher_game_logs_fg(key_ids %>%
          Date = as.Date(Date)); data %>% 
   ggplot() +
   geom_hline(yintercept = mean(data$PTS)) +
-  geom_line(aes(x = Date, y = five_game, color = "FiveGmAvg")) +
   geom_line(aes(x = Date, y = ten_game, color = "OneGmAvg")) +
+  geom_line(aes(x = Date, y = five_game, color = "FiveGmAvg")) +
   geom_line(aes(x = Date, y = three_game, color = "ThreeGmAvg")) +
   ggtitle(label = "Rolling Avgs") +
   labs(color = "Legend") +
@@ -35,8 +38,8 @@ data <- pitcher_game_logs_fg(key_ids %>%
 
 ### BATTERS
 data <- batter_game_logs_fg(key_ids %>%
-                              filter(name == "Jeremy Peña") %>%
-                              pull(key_fangraphs), year = 2023) %>%
+                              filter(name == "JJ Bleday", !is.na(key_fangraphs)) %>%
+                              pull(key_fangraphs) %>% .[1], year = 2024) %>%
   mutate(CYC = ifelse(`1B` >= 1 & `2B` >= 1 & `3B` >= 1 & HR >= 1, 1, 0),
          PTS = 0.5*R + 1.5*`1B` + 3*`2B` + 4.5*`3B` + 6*HR + RBI + 2*SB - 2*CS + 1.5*BB + 1.5*HBP + 1.5*IBB - 1.5*SO + 5*CYC,
          five_game = (zoo::rollmean(PTS, k = 5, align = "left", fill = NA)),
@@ -56,4 +59,14 @@ data <- batter_game_logs_fg(key_ids %>%
        subtitle = paste("Season Avg:", round(mean(data$PTS), 3), sep = " ")) +
   theme_minimal() +
   ylim(c(-5,10)); paste("Min 5gm:", min(data$five_game, na.rm = T), "Max 5gm:", max(data$five_game,na.rm=T))
+
+
+
+
+paste0("https://www.fangraphs.com/api/players/game-log?playerid=",
+       29617,
+       "&position=&type=0&gds=&gde=&z=1703085978&season=",
+       2024)
+
+x = fg_batter_game_logs(29617, 2024)
 

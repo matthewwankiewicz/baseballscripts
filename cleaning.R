@@ -63,13 +63,15 @@ data2024 <- data2024[!duplicated(data2024), ]
 
 
 ## get player id table
+useable_data <- readRDS('/Users/matthew/Library/Mobile Documents/com~apple~CloudDocs/Documents/statcast_2024.rds')
+
 player_table <- chadwick_player_lu()
 
 statcast_ids <- player_table %>% 
   mutate(name = paste(name_first, name_last, sep = " ")) %>% 
   select(name, key_mlbam)
 
-data2024 %>% 
+useable_data %>% 
   left_join(statcast_ids, by = c("pitcher" = "key_mlbam")) %>% 
   relocate(name) %>% 
   rename("pitcher_name" = name) %>%
@@ -77,7 +79,6 @@ data2024 %>%
   left_join(statcast_ids, by = c("batter" = "key_mlbam")) %>% 
   rename("batter_name" = name) %>% 
   relocate(batter_name) -> usable_data
-
 
 
 ## edit copied data here
@@ -146,7 +147,7 @@ saveRDS(data2024, file = "statcast_2024.rds")
 ## filter for starters
 starter_data <- data2024 %>% 
   group_by(pitcher_name) %>% 
-  filter(n()<1500 & n()>100) %>% 
+  filter(n()>1500) %>% 
   summarise(whiff_rate = mean(whiff[swing==T], na.rm=T),
             barrel_rate = mean(barrel[bb_type!='' & description!='foul'], na.rm=T),
             exit_velo = mean(launch_speed[bb_type!='' & description!='foul'], na.rm=T),
@@ -166,8 +167,7 @@ starter_data <- data2024 %>%
 
 ### k-means
 df_numeric <- starter_data %>% 
-  select(c(xBA, fastball_velo, exit_velo, chase_rate, whiff_rate, k_rate, 
-           bb_rate, barrel_rate, hard_hit_rate, groundball_rate, extension))
+  select(c(chase_rate, whiff_rate, edge_rate, strike_pct, barrel_rate))
 
 # Standardize the data
 df_scaled <- scale(df_numeric)
@@ -181,7 +181,7 @@ plot(1:10, wss, type = "b", pch = 19, frame = FALSE,
 
 # Perform K-means clustering with chosen k (e.g., k = 3)
 set.seed(123)  # Ensure reproducibility
-kmeans_result <- kmeans(df_scaled, centers = 4, nstart = 25)
+kmeans_result <- kmeans(df_scaled, centers = 2, nstart = 25)
 
 # Add cluster assignments to the original data
 starter_data$cluster <- as.factor(kmeans_result$cluster)
@@ -207,6 +207,72 @@ ggplot(pca_data, aes(x = PC1, y = PC2, color = cluster, label = pitcher_name)) +
   scale_color_manual(values = c("red", "blue", "green", "orange")) +
   geom_text(vjust = 1.5, size = 3)
 
+
+starter_data %>% 
+  group_by(cluster) %>% 
+  summarise_all("mean") %>% 
+  data.table::data.table()
+
+View(starter_data)
+
+#### add in minor league data
+minor_leagues <- readRDS('/Users/matthew/Library/Mobile Documents/com~apple~CloudDocs/Documents/milb_pitch_data.rds')
+
+
+minor_league_nums <- minor_leagues %>% 
+  group_by(pitcher_name) %>% 
+  filter(n()<1500 & n()>700) %>% 
+  summarise(whiff_rate = mean(whiff[swing==T], na.rm=T),
+            barrel_rate = mean(barrel[bb_type!='' & description!='foul'], na.rm=T),
+            exit_velo = mean(launch_speed[bb_type!='' & description!='foul'], na.rm=T),
+            fastball_velo = mean(release_speed[pitch_group == "fastball"], na.rm=T),
+            sweet_spot_rate = mean(sweet_spot[bb_type!='' & description!='foul'], na.rm = T),
+            k_rate = mean(result.eventType[last.pitch.of.ab=="true"] == "strikeout", na.rm=T),
+            bb_rate = mean(result.eventType[last.pitch.of.ab=="true"] == "walk", na.rm=T),
+            hard_hit_rate = mean(hard_hit[bb_type != ''], na.rm=T),
+            groundball_rate = mean(bb_type[bb_type!=''] == "ground_ball", na.rm = T),
+            extension = mean(release_extension, na.rm=T),
+            edge_rate = mean(edge, na.rm=T),
+            expected_chase = mean(expected_chase, na.rm = T),
+            chase_rate = mean(chase[actual_strike==F], na.rm=T),
+            strike_pct = mean(actual_strike, na.rm=T)) %>% 
+  filter(!is.na(exit_velo))
+
+### select numeric columns
+minor_league_nums_df <- minor_league_nums %>% 
+  select(c(chase_rate, whiff_rate, hard_hit_rate, groundball_rate))
+
+## scale
+df_minor_scaled <- scale(minor_league_nums_df)
+
+## predict
+# Compute distances between minor league data and k-means centroids
+distances <- as.matrix(dist(rbind(kmeans_result$centers, df_minor_scaled)))[-(1:nrow(kmeans_result$centers)), 1:nrow(kmeans_result$centers)]
+
+# Assign each minor league player to the closest cluster
+minor_league_clusters <- apply(distances, 1, which.min)
+
+### add clusters
+minor_league_nums <- minor_league_nums %>%
+  mutate(cluster = minor_league_clusters)
+
+
+minor_league_nums %>% 
+  group_by(cluster) %>% 
+  summarise_all("mean") %>% 
+  data.table::data.table()
+
+
+## jays pitchers
+jays_pitchers <- minor_leagues %>% 
+  filter(pitching_team %in% c("Buffalo Bisons", 
+                              "New Hampshire Fisher Cats")) %>% 
+  pull(pitcher_name) %>% unique()
+
+
+minor_league_nums %>%
+  filter(pitcher_name %in% jays_pitchers) %>% 
+  View
 
 
 ### pull free agent pitchers
@@ -247,34 +313,40 @@ savant_data <- data2024 %>%
             edge_rate = mean(edge, na.rm=T),
             expected_chase = mean(expected_chase, na.rm = T),
             chase_rate = mean(chase[actual_strike==F], na.rm=T),
-            strike_pct = mean(actual_strike, na.rm=T))
+            strike_pct = mean(actual_strike, na.rm=T)) %>% 
+  ungroup()
 
 
 
 ### movement stats (fastball h movement, breaking v movement, spin)
 fastball_data <- data2024 %>% 
+  filter(pitch_group=='fastball') %>% 
   group_by(pitcher_name) %>% 
   mutate(reliever = n()<1500) %>% 
   group_by(pitcher_name, reliever) %>% 
   filter(n()>150) %>%
-  summarise(fastball_velo = mean(release_speed[pitch_group=="fastball"], na.rm=T),
-            fastball_movement = abs(mean(pfx_x[pitch_group=='fastball'], na.rm = T)),
-            VAA = mean(VAA[pitch_group=='fastball'], na.rm = T),
-            fastball_spin = mean(release_spin_rate[pitch_group=='fastball'], na.rm = T),
-            HAA = mean(HAA[pitch_group=='fastball'], na.rm = T),
-            release_pos = mean(release_pos_z[pitch_group=='fastball'], na.rm=T)) %>% 
+  summarise(fastball_velo = mean(release_speed, na.rm=T),
+            fastball_movement = abs(mean(pfx_x, na.rm = T)),
+            VAA = mean(VAA, na.rm = T),
+            fastball_spin = mean(release_spin_rate, na.rm = T),
+            HAA = mean(HAA, na.rm = T),
+            release_pos = mean(release_pos_z, na.rm=T)) %>% 
   ungroup()
 
 
-starter_data <- fastball_data %>% 
+starter_data <- savant_data %>% 
   filter(reliever==T) 
 
 ### k-means
 df_numeric <- starter_data %>% 
-  select(c(fastball_velo, fastball_movement, VAA, fastball_spin, HAA, release_pos))
+  select(c(whiff_rate, barrel_rate, groundball_rate, fastball_velo, k_rate, bb_rate, 
+           extension, sweet_spot_rate, xwOBA, exit_velo))
 
 # Standardize the data
 df_scaled <- scale(df_numeric)
+
+# add rownames
+rownames(df_scaled) <- starter_data$pitcher_name
 
 # Determine optimal clusters using the elbow method
 wss <- map_dbl(1:10, ~kmeans(df_scaled, .x, nstart = 25)$tot.withinss)
@@ -285,13 +357,25 @@ plot(1:10, wss, type = "b", pch = 19, frame = FALSE,
 
 # Perform K-means clustering with chosen k (e.g., k = 3)
 set.seed(123)  # Ensure reproducibility
-kmeans_result <- kmeans(df_scaled, centers = 4, nstart = 25)
+kmeans_result <- kmeans(df_scaled, centers = 5, nstart = 25)
+
+### plot
+fviz_cluster(kmeans_result, data = df_scaled)
+
 
 # Add cluster assignments to the original data
 starter_data$cluster <- as.factor(kmeans_result$cluster)
 
+
+# group by cluster, get means
+starter_data %>% 
+  group_by(cluster) %>% 
+  summarise_all("mean") %>% 
+  data.table::data.table()
+
+
 # View results
-starter_data %>% arrange(cluster)
+starter_data %>% filter(pitcher_name %in% free_agents) %>% View
 
 ##plot
 pca_result <- prcomp(df_scaled, center = TRUE, scale. = TRUE)
@@ -312,4 +396,5 @@ ggplot(pca_data, aes(x = PC1, y = PC2, color = cluster, label = pitcher_name)) +
   geom_text(vjust = 1.5, size = 3)
 
 
+fviz_cluster()
 

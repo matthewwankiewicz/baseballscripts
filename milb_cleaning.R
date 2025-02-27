@@ -71,7 +71,7 @@ aaa_pitch_data_clean <- aaa_pitch_data_clean %>%
          sz_right = 0.83,
          actual_strike = ifelse(zone <= 9, 1, 0),
          whiff = ifelse(details.call.description %in% c("Foul Tip", "Swinging Strike", "Swinging Strike (Blocked)"), 1, 0),
-         swing = ifelse(grepl('swing|foul', details.call.description, ignore.case = T), 1, 0),
+         swing = ifelse(grepl('swing|foul', details.call.description, ignore.case = T)|details.call.code=='X', 1, 0),
          chase = ifelse(swing == 1 & actual_strike == 0,1,0),
          zone_swing = ifelse(swing == 1 & actual_strike == 1, 1, 0),
          hitting_team = ifelse(about.isTopInning, away_team, home_team),
