@@ -206,3 +206,99 @@ jays <- minor_leagues %>%
 
 milb_batter_stats %>% 
   filter(batter_name%in%jays) %>% View
+
+
+
+########################### 2024 clustering ###########################
+data2024 <- readRDS("data_folder/statcast_2024.rds")
+
+
+## group by batter, get stats of interest
+batter_stats <- data2024 %>%
+  filter(game_date>='2024-03-28') %>% 
+  group_by(batter_name) %>%
+  filter(n()>100) %>% 
+  summarise(
+    # Power/contact quality metrics
+    barrel_rate = mean(barrel[!is.na(hit_type)], na.rm = TRUE),
+    hard_hit_rate = mean(hard_hit[!is.na(hit_type)], na.rm = TRUE),
+    sweet_spot_rate = mean(sweet_spot[!is.na(bb_type) & bb_type != ''], na.rm = TRUE),
+    xwOBA = mean(estimated_woba_using_speedangle, na.rm = TRUE),
+    xBA = mean(estimated_ba_using_speedangle, na.rm = TRUE),
+    
+    # Plate discipline metrics
+    k_rate = mean(events[events!=''] == "strikeout", na.rm = TRUE),
+    bb_rate = mean(events[events!=''] == "walk", na.rm = TRUE),
+    chase_rate = mean(chase[actual_strike == 0], na.rm = TRUE),
+    whiff_rate = mean(whiff[swing == 1], na.rm = TRUE)
+    
+  )
+
+## remove player name, scale
+batter_stats_scaled <- batter_stats %>% 
+  select(-batter_name) %>% 
+  scale()
+
+
+### kmeans
+library(factoextra)
+
+# Elbow method to find optimal k
+set.seed(21)
+fviz_nbclust(batter_stats_scaled, kmeans, method = "wss", k.max = 10)
+
+# Perform k-means
+set.seed(21)
+kmeans_result <- kmeans(batter_stats_scaled, centers = 3, nstart = 25)
+
+
+## assign cluster
+batter_stats$cluster <- kmeans_result$cluster
+
+## find averages per cluster
+batter_stats %>% 
+  group_by(cluster) %>% 
+  summarise(across(everything(), mean, na.rm=T)) %>% 
+  data.table()
+
+
+# cluster batter_name barrel_rate hard_hit_rate sweet_spot_rate     xwOBA
+# <int>       <num>       <num>         <num>           <num>     <num>
+#   1:       1          NA  0.04609615     0.3241195       0.3392053 0.2934823
+# 2:       2          NA  0.11336162     0.4418394       0.3756459 0.3305504
+# 3:       3          NA  0.06210315     0.3510126       0.3122749 0.2557495
+# xBA    k_rate    bb_rate chase_rate whiff_rate
+# <num>     <num>      <num>      <num>      <num>
+#   1: 0.2999321 0.1835692 0.07620126  0.2800922  0.2007991
+# 2: 0.3457190 0.2623267 0.09044194  0.2670934  0.2856762
+# 3: 0.2937043 0.2924957 0.05842533  0.3286987  0.3106514
+
+# 1: lowest barrel, hard hit, k, whiff, middle: sweet spot, xwoba, xba, bb, chase (contact hitter) -> Look at
+# 2: highest barrel, hard hit, sweet spot, xwOBA, xBA, bb, middle k's, middle whiff, lowest chase -> TARGET
+# 3: mid: barrel, hard hit. high: k, chase, whiff. low: xwOBA, xBA, walk -> AVOID
+
+
+
+#### pitchers
+pitcher_stats <- data2024 %>%
+  filter(game_date>='2024-03-28') %>% 
+  group_by(pitcher_name) %>%
+  filter(n()>500) %>% 
+  summarise(
+    # Power/contact quality metrics
+    barrel_rate = mean(barrel[!is.na(hit_type)], na.rm = TRUE),
+    hard_hit_rate = mean(hard_hit[!is.na(hit_type)], na.rm = TRUE),
+    sweet_spot_rate = mean(sweet_spot[!is.na(bb_type) & bb_type != ''], na.rm = TRUE),
+    xwOBA = mean(estimated_woba_using_speedangle, na.rm = TRUE),
+    xBA = mean(estimated_ba_using_speedangle, na.rm = TRUE),
+    
+    # Plate discipline metrics
+    k_rate = mean(events[events!=''] == "strikeout", na.rm = TRUE),
+    bb_rate = mean(events[events!=''] == "walk", na.rm = TRUE),
+    chase_rate = mean(chase[actual_strike == 0], na.rm = TRUE),
+    whiff_rate = mean(whiff[swing == 1], na.rm = TRUE)
+    
+  )
+
+
+
